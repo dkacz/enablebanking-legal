@@ -21,6 +21,9 @@
         border-radius: 10px;
         word-break: break-word;
       }
+      .muted {
+        opacity: 0.8;
+      }
       code {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       }
@@ -34,50 +37,153 @@
     </style>
   </head>
   <body>
-    <h1>EnableBanking authorization received</h1>
+    <h1>EnableBanking authorization callback</h1>
     <p>
-      Copy the <strong>full URL</strong> from your address bar and paste it into the CLI prompt.
-      The URL contains the <code>?code=...</code> that the CLI needs.
+      This page is your application's <strong>redirect URL</strong>. Your CLI needs the
+      <code>code</code> value.
     </p>
 
-    <h2>Full URL</h2>
+    <h2>1) Copy the code</h2>
+    <div class="box"><code id="code"></code></div>
+    <p>
+      <button id="copy-code">Copy code</button>
+      <button id="copy-command">Copy terminal command</button>
+    </p>
+    <p class="muted">
+      Terminal command (adjust <code>--state ...</code> if your CLI told you a different filename):
+    </p>
+    <div class="box"><code id="command"></code></div>
+
+    <h2>2) If you see an error</h2>
+    <div class="box"><code id="error"></code><span id="error-desc"></span></div>
+    <p class="muted" id="error-hint"></p>
+
+    <h2>Saved (so it doesn't disappear)</h2>
+    <p class="muted">
+      This page stores the last callback URL locally in your browser (localStorage). If you closed
+      the tab before copying, open this page again and you should still see the last code.
+    </p>
+    <div class="box" id="saved-url"></div>
+    <p>
+      <button id="copy-saved">Copy saved URL</button>
+      <button id="clear-saved">Clear saved</button>
+    </p>
+
+    <h2>Full URL (for debugging)</h2>
     <div class="box" id="full-url"></div>
     <p><button id="copy-full">Copy full URL</button></p>
 
     <h2>Details</h2>
     <ul>
-      <li><strong>code:</strong> <code id="code"></code></li>
       <li><strong>state:</strong> <code id="state"></code></li>
-      <li><strong>error:</strong> <code id="error"></code></li>
-      <li><strong>error_description:</strong> <code id="error-desc"></code></li>
     </ul>
 
     <script>
-      const params = new URLSearchParams(window.location.search);
+      const storageKeyUrl = "enablebanking:lastRedirectUrl";
+      const storageKeyAt = "enablebanking:lastRedirectAt";
+
+      function safeParseUrl(maybeUrl) {
+        try {
+          return new URL(maybeUrl);
+        } catch {
+          return null;
+        }
+      }
+
+      function setButtonCopied(btn, label = "Copied!") {
+        btn.textContent = label;
+        setTimeout(() => {
+          btn.textContent = btn.dataset.label;
+        }, 1500);
+      }
+
+      async function copyToClipboard(text, button) {
+        try {
+          await navigator.clipboard.writeText(text);
+          setButtonCopied(button);
+        } catch (e) {
+          alert("Could not copy automatically. Please copy it manually.");
+        }
+      }
+
+      const currentUrl = window.location.href;
+      const current = safeParseUrl(currentUrl);
+      const currentParams = current ? new URLSearchParams(current.search) : new URLSearchParams();
+      const currentCode = currentParams.get("code") || "";
+      const currentState = currentParams.get("state") || "";
+      const currentError = currentParams.get("error") || "";
+      const currentErrorDesc = currentParams.get("error_description") || "";
+
+      const hasResult = Boolean(currentCode || currentError || currentState);
+      if (hasResult) {
+        localStorage.setItem(storageKeyUrl, currentUrl);
+        localStorage.setItem(storageKeyAt, new Date().toISOString());
+      }
+
+      const savedUrl = localStorage.getItem(storageKeyUrl) || "";
+      const savedAt = localStorage.getItem(storageKeyAt) || "";
+
+      const effectiveUrl = hasResult ? currentUrl : savedUrl || currentUrl;
+      const effective = safeParseUrl(effectiveUrl);
+      const params = effective ? new URLSearchParams(effective.search) : new URLSearchParams();
+
       const code = params.get("code") || "";
       const state = params.get("state") || "";
       const error = params.get("error") || "";
       const errorDesc = params.get("error_description") || "";
 
-      const fullUrl = window.location.href;
-      document.getElementById("full-url").textContent = fullUrl;
-      document.getElementById("code").textContent = code;
-      document.getElementById("state").textContent = state;
-      document.getElementById("error").textContent = error;
-      document.getElementById("error-desc").textContent = errorDesc;
+      document.getElementById("full-url").textContent = currentUrl;
+      document.getElementById("saved-url").textContent = savedUrl
+        ? `${savedUrl}${savedAt ? `\\n(saved at ${savedAt})` : ""}`
+        : "(nothing saved yet)";
 
-      document.getElementById("copy-full").addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(fullUrl);
-          document.getElementById("copy-full").textContent = "Copied!";
-          setTimeout(() => {
-            document.getElementById("copy-full").textContent = "Copy full URL";
-          }, 1500);
-        } catch (e) {
-          alert("Could not copy automatically. Please copy the URL from the address bar.");
+      document.getElementById("code").textContent = code || "(no code)";
+      document.getElementById("state").textContent = state || "(no state)";
+      document.getElementById("error").textContent = error || "(no error)";
+      document.getElementById("error-desc").textContent = errorDesc ? ` — ${errorDesc}` : "";
+
+      const command = code
+        ? `cd integrations/enablebanking && node cli.mjs connect --state state-personal.json --code \"${code}\"`
+        : "No code available yet.";
+      document.getElementById("command").textContent = command;
+
+      const hintEl = document.getElementById("error-hint");
+      if (error) {
+        if (error === "server_error") {
+          hintEl.textContent =
+            "This usually means a temporary bank (ASPSP) error. There is no code to paste. Retry the authorization later (generate a fresh URL in the CLI).";
+        } else {
+          hintEl.textContent =
+            "No code was returned. You need to retry the authorization in the bank and come back to this page.";
         }
+      } else if (!code) {
+        hintEl.textContent =
+          "No code in the current URL. If you authorized earlier, the last saved URL may still contain it.";
+      } else {
+        hintEl.textContent = "";
+      }
+
+      const copyFullBtn = document.getElementById("copy-full");
+      copyFullBtn.dataset.label = copyFullBtn.textContent;
+      copyFullBtn.addEventListener("click", () => copyToClipboard(currentUrl, copyFullBtn));
+
+      const copySavedBtn = document.getElementById("copy-saved");
+      copySavedBtn.dataset.label = copySavedBtn.textContent;
+      copySavedBtn.addEventListener("click", () => copyToClipboard(savedUrl, copySavedBtn));
+
+      const copyCodeBtn = document.getElementById("copy-code");
+      copyCodeBtn.dataset.label = copyCodeBtn.textContent;
+      copyCodeBtn.addEventListener("click", () => copyToClipboard(code, copyCodeBtn));
+
+      const copyCommandBtn = document.getElementById("copy-command");
+      copyCommandBtn.dataset.label = copyCommandBtn.textContent;
+      copyCommandBtn.addEventListener("click", () => copyToClipboard(command, copyCommandBtn));
+
+      document.getElementById("clear-saved").addEventListener("click", () => {
+        localStorage.removeItem(storageKeyUrl);
+        localStorage.removeItem(storageKeyAt);
+        document.getElementById("saved-url").textContent = "(nothing saved yet)";
       });
     </script>
   </body>
 </html>
-
