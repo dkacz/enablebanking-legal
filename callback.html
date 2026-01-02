@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EnableBanking OAuth Callback</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        line-height: 1.55;
+        margin: 0;
+        padding: 24px;
+        max-width: 880px;
+      }
+      .box {
+        padding: 12px 14px;
+        border: 1px solid rgba(127, 127, 127, 0.35);
+        border-radius: 10px;
+        word-break: break-word;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+      button {
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(127, 127, 127, 0.35);
+        background: transparent;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>EnableBanking authorization received</h1>
+    <p>
+      Copy the <strong>full URL</strong> from your address bar and paste it into the CLI prompt.
+      The URL contains the <code>?code=...</code> that the CLI needs.
+    </p>
+
+    <h2>Full URL</h2>
+    <div class="box" id="full-url"></div>
+    <p><button id="copy-full">Copy full URL</button></p>
+
+    <h2>Details</h2>
+    <ul>
+      <li><strong>code:</strong> <code id="code"></code></li>
+      <li><strong>state:</strong> <code id="state"></code></li>
+      <li><strong>error:</strong> <code id="error"></code></li>
+      <li><strong>error_description:</strong> <code id="error-desc"></code></li>
+    </ul>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code") || "";
+      const state = params.get("state") || "";
+      const error = params.get("error") || "";
+      const errorDesc = params.get("error_description") || "";
+
+      const fullUrl = window.location.href;
+      document.getElementById("full-url").textContent = fullUrl;
+      document.getElementById("code").textContent = code;
+      document.getElementById("state").textContent = state;
+      document.getElementById("error").textContent = error;
+      document.getElementById("error-desc").textContent = errorDesc;
+
+      document.getElementById("copy-full").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(fullUrl);
+          document.getElementById("copy-full").textContent = "Copied!";
+          setTimeout(() => {
+            document.getElementById("copy-full").textContent = "Copy full URL";
+          }, 1500);
+        } catch (e) {
+          alert("Could not copy automatically. Please copy the URL from the address bar.");
+        }
+      });
+    </script>
+  </body>
+</html>
+
